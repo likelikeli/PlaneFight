@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title></title>
+		<style type="text/css">
+			canvas {
+				border: 1px solid;
+			}			
+			#wrap {
+				width: 320px;
+				height: 568px;
+				background: rgba(222, 222, 222, 0.6);
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				display: none;
+			}		
+			button {
+				position: absolute;
+				top: 50%;
+				left: calc(50% - 25px);
+			}			
+			a {
+				text-decoration: none;
+			}		
+			.content {
+				position: absolute;
+				top: 45%;
+				color: red;
+				left: calc(50% - 25px);
+			}
+		</style>
+	</head>
+	<body>
+		<audio src="audio/bullet.mp3" autoplay="autoplay" loop="loop"></audio>
+		<audio id="fly" src="audio/enemy2_out.mp3" autoplay="autoplay" loop="loop"></audio>
+		<canvas id="canvas" width="" height=""></canvas>
+		<audio id="start" src="audio/game_music.mp3" autoplay="autoplay" loop="loop"></audio>
+		<audio id="enemy0" src="" autoplay="autoplay"></audio>
+		<div id="wrap">
+			<div class="content">
+				<span>分数为:</span>
+				<span id="score">					
+				</span>
+			</div>
+			<button><a href="">重新开始</a></button>
+		</div>
+	</body>
+	<script type="text/javascript">
+		var scores = document.getElementById("score");
+		var fly = document.getElementById("fly");
+		var wrap = document.getElementById("wrap");
+		var audio = document.getElementsByTagName('audio')[0]
+		var enemy0 = document.getElementById("enemy0");
+		var start = document.getElementById("start");
+		var gameover = document.getElementById("gameover");
+		//对象 主机 子弹 敌机
+		//方法：画 动
+		//碰撞：主机碰撞敌机 子弹碰撞敌机 （像素碰撞 性能问题）
+		//玩法 声音（选作）
+		//随机数
+		function Randnum(min, max) {
+			return parseInt(Math.random() * (max - min) + min);
+		}
+		//图片预加载
+		var imgarr = {
+			"bg": "img/background.png",
+			"herofly": "img/herofly.png",
+			"bullet1": "img/bullet1.png",
+			"bullet": "img/bullet2.png",
+			"enemy1": "img/enemy1.png",
+			"enemy2": "img/enemy2.png",
+			"enemy3": "img/enemy3.png",
+			"prop": "img/prop.png"
+		}
+		var imglength = 0;
+		for(var i in imgarr) {
+			imglength++;
+		}
+		var num = 0;
+		var loadArr = {};
+		for(let i in imgarr) {
+			var img = new Image();
+			img.src = imgarr[i];
+			img.onload = function() {
+				loadArr[i] = this;
+				num++;
+				if(num == imglength) {
+					main(loadArr);
+				}
+			}
+		}
+		function main(loadArr) {
+			var canvas = document.getElementById("canvas");
+			var context = canvas.getContext("2d");
+			canvas.width = loadArr.bg.width;
+			canvas.height = loadArr.bg.height;
+			var res;
+			//主机对象
+			var x = 120;
+			var y = canvas.height - 82;
+			class Hero {
+				constructor(x, y, blood, obj) {
+					this.x = x;
+					this.y = y;
+					this.blood = blood;
+					this.obj = obj;
+					this.w = this.obj.width / 5;
+					this.h = this.obj.height;
+					this.index = 0;
+					this.num = 0;
+					this.dis = "";
+				}
+				//画主机
+				draw() {
+					//						this.blood--;
+					this.num++;
+					if(this.blood < 0) {
+						if(this.num % 3 == 0) {
+							this.index++;
+						}
+					}
+					context.drawImage(this.obj, this.index * this.w, 0, this.w, this.h, this.x, this.y, this.w, this.h);
+				}
+				move() {
+					var _this = this;
+					if(_this.x < 0) {
+						x = 0;
+						_this.x = 0;
+					}
+					if(_this.y < 0) {
+						_this.y = 0;
+					}
+					if(_this.x > canvas.width - _this.w) {
+						_this.x = canvas.width - _this.w;
+						x = canvas.width - _this.w;
+					}
+					if(_this.y > canvas.height - _this.h) {
+						_this.y = canvas.height - _this.h;
+						y = canvas.height - _this.h;
+					}
+				}
+			}
+			var newhero = new Hero(x, y, 100, loadArr.herofly);
+			newhero.draw();
+			//子弹类
+			class Bullet {
+				constructor(x, y, blood, obj, speed) {
+					this.x = x;
+					this.y = y;
+					this.obj = obj;
+					this.blood = blood;
+					this.w = obj.width;
+					this.h = obj.height;
+					this.speed = speed;
+				}
+				//画子弹
+				draw() {
+					context.drawImage(this.obj, 0, 0, this.w, this.h, this.x, this.y, this.w, this.h)
+				}
+				move() {
+					this.y -= this.speed;
+				}
+				isClear() {
+					if(this.y < 0) {
+						return true;
+					} else {
+						return false;
+					}
+				}
+			}
+			//敌机类
+			var isbts = true;
+			class Enemy {
+				constructor(x, y, blood, obj, speed) {
+					this.x = x;
+					this.y = y;
+					this.obj = obj;
+					this.blood = blood;
+					this.num = 0;
+					this.index = 0;
+					this.i = 0;
+					//this.isbts=isbts;
+					this.h = obj.height;
+					this.speed = speed;
+					if(this.obj.width == 190) {
+						this.w = obj.width / 5;
+						this.i = 5;
+					} else if(this.obj.width == 276) {
+						this.w = obj.width / 6;
+						this.i = 6
+					} else if(this.obj.width == 1100) {
+						this.w = obj.width / 10;
+						this.i = 10;
+					}
+				}
+				draw() {
+					this.num++;
+					if(this.blood < 0) {
+
+						if(this.num % 3 == 0) {
+							this.index++;
+						}
+					}
+					context.drawImage(this.obj, this.index * this.w, 0, this.w, this.h, this.x, this.y, this.w, this.h)
+				}
+				move() {
+					this.y += this.speed;
+				}
+				isClear() {
+					if(this.y > canvas.height) {
+						return true;
+					} else {
+						return false;
+					}
+				}
+			}
+			//食物类
+			class Food {
+				constructor(x, y, obj, speed, num) {
+					this.x = x;
+					this.y = y;
+					this.obj = obj;
+					this.speed = speed;
+					this.w = this.obj.width / 3;
+					this.num = num;
+					this.h = this.obj.height;
+				}
+				draw() {
+					context.drawImage(this.obj, this.num * this.w, 0, this.w, this.h, this.x, this.y, this.w, this.h)
+				}
+				move() {
+					this.y += this.speed;
+				}
+				isClear() {
+					if(this.y > canvas.height) {
+						return true;
+					} else {
+						return false;
+					}
+				}
+			}
+			//存放食物的容器
+			var newfoods = [];
+			//存放敌机的容器
+			var enemys = [];
+			//存放子弹的容器
+			var bullets = [];
+			var num = 0;
+			//做动画
+			var yy = 0;
+			var score = 0;
+			context.font = "italic 15px serif";
+			var gradient = context.createLinearGradient(100, 0, 400, 0);
+			gradient.addColorStop("0", "blue");
+			gradient.addColorStop("0.5", "green");
+			gradient.addColorStop("1", "red");
+			context.strokeStyle = gradient;
+			context.strokeText(score, 100, 100);
+			function act() {
+				num++
+				context.clearRect(0, 0, canvas.width, canvas.height);
+				context.drawImage(loadArr.bg, 0, -(canvas.height - yy));
+				context.drawImage(loadArr.bg, 0, yy);
+				yy += 2;
+				if(Math.abs(yy) > canvas.height) {
+					yy = 0;
+				}
+				//子弹
+				if(num % 18 == 0) {
+					if(isbts) {
+						var newBullet = new Bullet(x + 30, newhero.y - 10, 10, loadArr.bullet1, 2)
+						bullets.push(newBullet);
+					} else {
+						var newBullet = new Bullet(x + 10, newhero.y - 10, 20, loadArr.bullet, 2)
+						bullets.push(newBullet);
+					}
+				}
+				for(var i = 0; i < bullets.length; i++) {
+					bullets[i].draw();
+					bullets[i].move();
+					if(bullets[i].isClear()) {
+						bullets.splice(i, 1);
+					}
+				}
+				//敌机
+				if(num % 120 == 0) {
+					var s = Randnum(0, 10);
+					if(s >= 0 && s < 2) {
+						var ss = Randnum(0, canvas.width - loadArr.enemy3.width / 10)
+						var enemy = new Enemy(ss, -loadArr.enemy3.height, 120, loadArr.enemy3, 1);
+						enemys.push(enemy);
+					} else if(s >= 2 && s < 5) {
+						var ss = Randnum(0, canvas.width - loadArr.enemy2.width / 6)
+						var enemy = new Enemy(ss, -loadArr.enemy2.height, 40, loadArr.enemy2, 2);
+						enemys.push(enemy);
+					} else {
+						var ss = Randnum(0, canvas.width - loadArr.enemy1.width / 5)
+						var enemy = new Enemy(ss, -loadArr.enemy1.height, 20, loadArr.enemy1, 2);
+						enemys.push(enemy);
+					}
+				}
+				for(var i = 0; i < enemys.length; i++) {
+
+					enemys[i].draw();
+					enemys[i].move();
+					if(enemys[i].isClear()) {
+						enemys.splice(i, 1);
+					}
+				}
+				//食物
+				if(num % 400 == 0) {
+					var numss = Randnum(0, 2);
+					var newfood = new Food(Randnum(0, canvas.width - loadArr.prop.width / 3), -loadArr.prop.height, loadArr.prop, 2, numss);
+					newfoods.push(newfood);
+				}
+				for(var i = 0; i < newfoods.length; i++) {
+					newfoods[i].draw();
+					newfoods[i].move();
+					if(newfoods[i].isClear()) {
+						newfoods.splice(i, 1);
+					}
+				}
+				newhero.draw();
+				newhero.move();
+				//食物与英雄机的碰撞
+				for(var i = 0; i < newfoods.length; i++) {
+					if(newhero.x + newhero.w > newfoods[i].x && newhero.x < newfoods[i].x + newfoods[i].w && newhero.y + newhero.h > newfoods[i].y && newhero.y < newfoods[i].y + newfoods[i].h) {
+						newfoods[i].y = 999;
+						if(newfoods[i].num == 0) {
+							isbts = true;
+						} else {
+							if(newfoods[i].num == 1) {
+								isbts = false;
+							}
+						}
+					}
+				}
+				//敌机和英雄机碰撞
+				for(var i = 0; i < enemys.length; i++) {
+					if(newhero.x + newhero.w > enemys[i].x && newhero.x < enemys[i].x + enemys[i].w && newhero.y + newhero.h > enemys[i].y && newhero.y < enemys[i].y + enemys[i].h) {
+						newhero.blood -= enemys[i].blood;
+					}
+				}
+				//检测碰撞子弹和敌机								
+				for(var j = 0; j < bullets.length; j++) {
+					for(var i = 0; i < enemys.length; i++) {
+						if(bullets[j].x + bullets[j].w > enemys[i].x && bullets[j].x < enemys[i].x + enemys[i].w && bullets[j].y + bullets[j].h > enemys[i].y && bullets[j].y < enemys[i].y + enemys[i].h) {
+							//让子弹消失
+							bullets[j].y = -20;
+							enemys[i].blood -= bullets[j].blood;
+							if(enemys[i].blood <= 0) {
+								if(enemys[i].i == 5) {
+									enemy0.src = "audio/enemy1_down.mp3"
+								}
+								if(enemys[i].i == 6) {
+									enemy0.src = "audio/enemy3_down.mp3"
+								}
+								if(enemys[i].i == 10) {
+									enemy0.src = "audio/enemy2_down.mp3"
+								}
+							}
+							if(enemys[i].index >= enemys[i].i) {
+								if(enemys[i].i == 5) {
+									score++
+								}
+								if(enemys[i].i == 6) {
+									score += 2
+								}
+								if(enemys[i].i == 10) {
+									score += 5
+								}
+								enemys[i].y = 9999;
+							}
+						}
+					}
+				}
+				context.font = "italic 20px serif";
+				var gradient = context.createLinearGradient(0, 0, 80, 0);
+				gradient.addColorStop("0", "blue");
+				gradient.addColorStop("0.5", "green");
+				gradient.addColorStop("1", "red");
+				context.strokeStyle = gradient;
+				context.strokeText("分数为:" + score, 0, 25);
+				res = window.requestAnimationFrame(act);
+				if(newhero.index >= 3) {
+					scores.innerHTML = score;
+					wrap.style.display = "block";
+					audio.loop = "";
+					fly.pause()
+					start.pause();
+					cancelAnimationFrame(res);
+				}
+			}
+			var boolArr = [false, false, false, false];
+			document.onkeydown = function(ev) {
+				var evObj = window.event || ev;
+				boolArr[evObj.keyCode - 37] = true;
+			}
+			document.onkeyup = function(ev) {
+				var evObj = window.event || ev;
+				boolArr[evObj.keyCode - 37] = false;
+			}
+			setInterval(function() {
+				var speed = 3;
+				var leftSpeed = (boolArr[2] - boolArr[0]) * speed;
+				var topSpeed = (boolArr[3] - boolArr[1]) * speed;
+				newhero.x += leftSpeed;
+				x += leftSpeed;
+				newhero.y += topSpeed;
+				y += topSpeed;
+			}, 20)
+			act();
+		}
+	</script>
+</html>
